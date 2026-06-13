@@ -1,13 +1,8 @@
 from fastapi import FastAPI, Request, Response
 import requests
 import os
-import json
 
 app = FastAPI()
-
-# =====================
-# CONFIG
-# =====================
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
@@ -17,10 +12,6 @@ PATHAO_CLIENT_SECRET = os.getenv("PATHAO_CLIENT_SECRET")
 PATHAO_EMAIL = os.getenv("PATHAO_EMAIL")
 PATHAO_PASSWORD = os.getenv("PATHAO_PASSWORD")
 
-
-# =====================
-# TELEGRAM
-# =====================
 
 def send_message(text):
     try:
@@ -36,12 +27,7 @@ def send_message(text):
         print("Telegram Error:", e)
 
 
-# =====================
-# PATHAO TOKEN
-# =====================
-
 def get_access_token():
-
     response = requests.post(
         "https://api-hermes.pathao.com/aladdin/api/v1/issue-token",
         json={
@@ -56,15 +42,8 @@ def get_access_token():
 
     data = response.json()
 
-    print("TOKEN RESPONSE:")
-    print(json.dumps(data, indent=2))
-
     return data.get("access_token")
 
-
-# =====================
-# ORDER INFO
-# =====================
 
 def get_order_info(consignment_id):
 
@@ -81,19 +60,12 @@ def get_order_info(consignment_id):
         timeout=20
     )
 
-    print("ORDER INFO STATUS:", response.status_code)
-    print("ORDER INFO RESPONSE:")
-    print(response.text)
+    result = response.json()
 
-    try:
-        return response.json()
-    except:
-        return None
+    print("ORDER INFO:", result)
 
+    return result.get("data")
 
-# =====================
-# HOME
-# =====================
 
 @app.get("/")
 def home():
@@ -108,104 +80,58 @@ def test():
     return {"success": True}
 
 
-@app.get("/debug")
-def debug():
-
-    return {
-        "BOT_TOKEN": bool(BOT_TOKEN),
-        "CHAT_ID": bool(CHAT_ID),
-        "PATHAO_CLIENT_ID": bool(PATHAO_CLIENT_ID),
-        "PATHAO_CLIENT_SECRET": bool(PATHAO_CLIENT_SECRET),
-        "PATHAO_EMAIL": bool(PATHAO_EMAIL),
-        "PATHAO_PASSWORD": bool(PATHAO_PASSWORD)
-    }
-
-
-@app.get("/token")
-def token():
-
-    token = get_access_token()
-
-    return {
-        "access_token": token
-    }
-
-
-# =====================
-# WEBHOOK
-# =====================
-
 @app.post("/pathao/webhook")
 async def webhook(request: Request):
 
     data = await request.json()
 
-    print("===================================")
-    print(json.dumps(data, indent=2))
-    print("===================================")
+    print("WEBHOOK:", data)
 
     event = data.get("event", "Unknown")
     consignment_id = data.get("consignment_id")
 
-    try:
+    info = None
 
-        order_info = get_order_info(consignment_id)
+    if consignment_id:
+        info = get_order_info(consignment_id)
 
-        # DEBUG MESSAGE
-        send_message(
-            f"🧪 DEBUG\n\n"
-            f"Event: {event}\n"
-            f"Consignment: {consignment_id}\n\n"
-            f"{json.dumps(order_info, indent=2)[:3000]}"
-        )
+    if info:
 
-        if (
-            order_info
-            and order_info.get("type") == "success"
-            and order_info.get("data")
-        ):
-
-            order = order_info["data"]
-
-            msg = f"""
+        message = f"""
 📦 Pathao Update
 
 🔔 Status: {event}
 
-🆔 Order ID: {order.get('order_id', 'N/A')}
-📦 Consignment: {order.get('order_consignment_id', 'N/A')}
+🆔 Order ID: {info.get("order_id", "N/A")}
+📦 Consignment: {info.get("order_consignment_id", "N/A")}
 
-👤 Customer: {order.get('recipient_name', 'N/A')}
-📞 Phone: {order.get('recipient_phone', 'N/A')}
+👤 Customer: {info.get("recipient_name", "N/A")}
+📞 Phone: {info.get("recipient_phone", "N/A")}
 
 📍 Address:
-{order.get('recipient_address', 'N/A')}
+{info.get("recipient_address", "N/A")}
 
-💰 COD Amount: ৳ {order.get('order_amount', 0)}
-🚚 Delivery Fee: ৳ {order.get('total_fee', 0)}
+💰 COD Amount: ৳{info.get("order_amount", 0)}
+🚚 Delivery Fee: ৳{info.get("delivery_fee", 0)}
 
-🏙 City: {order.get('city_name', '')}
-📌 Zone: {order.get('zone_name', '')}
+🏙️ City: {info.get("city_name", "")}
+📌 Zone: {info.get("zone_name", "")}
 
-🕒 Created:
-{order.get('order_created_at', '')}
+🕒 Created: {info.get("order_created_at", "")}
 """
 
-            send_message(msg)
+    else:
 
-        else:
+        message = f"""
+📦 Pathao Update
 
-            send_message(
-                f"⚠️ Order info not found\n\n"
-                f"Event: {event}\n"
-                f"Consignment: {consignment_id}"
-            )
+🔔 Status: {event}
 
-    except Exception as e:
+📦 Consignment:
+{consignment_id}
+"""
 
-        send_message(
-            f"❌ ERROR\n\n{str(e)}"
-        )
+    send_message(message)
 
     return Response(
         content="OK",
