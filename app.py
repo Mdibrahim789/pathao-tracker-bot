@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request, Response
-import os
 import requests
+import os
+import json
 
 app = FastAPI()
 
@@ -10,11 +11,11 @@ CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 def send_message(text):
     if not BOT_TOKEN or not CHAT_ID:
-        print("Telegram variables missing")
+        print("Telegram config missing")
         return
 
     try:
-        r = requests.post(
+        requests.post(
             f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
             json={
                 "chat_id": CHAT_ID,
@@ -22,26 +23,19 @@ def send_message(text):
             },
             timeout=10
         )
-
-        print("Telegram response:", r.text)
-
     except Exception as e:
-        print("Telegram error:", str(e))
+        print("Telegram Error:", e)
 
 
 @app.get("/")
 def home():
-    return {
-        "status": "running"
-    }
+    return {"status": "running"}
 
 
 @app.get("/test")
 def test():
     send_message("✅ Telegram Test OK")
-    return {
-        "ok": True
-    }
+    return {"success": True}
 
 
 @app.post("/pathao/webhook")
@@ -49,7 +43,10 @@ async def webhook(request: Request):
 
     data = await request.json()
 
-    print("PATHAO WEBHOOK:", data)
+    # Full webhook log
+    print("===================================")
+    print(json.dumps(data, indent=2))
+    print("===================================")
 
     event = data.get("event", "Unknown")
 
