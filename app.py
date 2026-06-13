@@ -5,9 +5,9 @@ import json
 
 app = FastAPI()
 
-# =========================
-# ENV VARIABLES
-# =========================
+# =====================
+# CONFIG
+# =====================
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
@@ -18,15 +18,11 @@ PATHAO_EMAIL = os.getenv("PATHAO_EMAIL")
 PATHAO_PASSWORD = os.getenv("PATHAO_PASSWORD")
 
 
-# =========================
+# =====================
 # TELEGRAM
-# =========================
+# =====================
 
 def send_message(text):
-    if not BOT_TOKEN or not CHAT_ID:
-        print("Telegram config missing")
-        return
-
     try:
         requests.post(
             f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
@@ -40,9 +36,9 @@ def send_message(text):
         print("Telegram Error:", e)
 
 
-# =========================
+# =====================
 # PATHAO TOKEN
-# =========================
+# =====================
 
 def get_access_token():
 
@@ -60,12 +56,15 @@ def get_access_token():
 
     data = response.json()
 
+    print("TOKEN RESPONSE:")
+    print(json.dumps(data, indent=2))
+
     return data.get("access_token")
 
 
-# =========================
-# ORDER DETAILS
-# =========================
+# =====================
+# ORDER INFO
+# =====================
 
 def get_order_info(consignment_id):
 
@@ -82,21 +81,24 @@ def get_order_info(consignment_id):
         timeout=20
     )
 
-    return response.json()
+    print("ORDER INFO STATUS:", response.status_code)
+    print("ORDER INFO RESPONSE:")
+    print(response.text)
+
+    try:
+        return response.json()
+    except:
+        return None
 
 
-# =========================
+# =====================
 # HOME
-# =========================
+# =====================
 
 @app.get("/")
 def home():
     return {"status": "running"}
 
-
-# =========================
-# TEST TELEGRAM
-# =========================
 
 @app.get("/test")
 def test():
@@ -106,38 +108,32 @@ def test():
     return {"success": True}
 
 
-# =========================
-# DEBUG
-# =========================
-
 @app.get("/debug")
 def debug():
 
     return {
+        "BOT_TOKEN": bool(BOT_TOKEN),
+        "CHAT_ID": bool(CHAT_ID),
         "PATHAO_CLIENT_ID": bool(PATHAO_CLIENT_ID),
         "PATHAO_CLIENT_SECRET": bool(PATHAO_CLIENT_SECRET),
         "PATHAO_EMAIL": bool(PATHAO_EMAIL),
-        "PATHAO_PASSWORD": bool(PATHAO_PASSWORD),
-        "BOT_TOKEN": bool(BOT_TOKEN),
-        "CHAT_ID": bool(CHAT_ID)
+        "PATHAO_PASSWORD": bool(PATHAO_PASSWORD)
     }
 
-
-# =========================
-# TOKEN TEST
-# =========================
 
 @app.get("/token")
 def token():
 
+    token = get_access_token()
+
     return {
-        "access_token": get_access_token()
+        "access_token": token
     }
 
 
-# =========================
+# =====================
 # WEBHOOK
-# =========================
+# =====================
 
 @app.post("/pathao/webhook")
 async def webhook(request: Request):
@@ -155,11 +151,23 @@ async def webhook(request: Request):
 
         order_info = get_order_info(consignment_id)
 
-        if order_info and order_info.get("data"):
+        # DEBUG MESSAGE
+        send_message(
+            f"🧪 DEBUG\n\n"
+            f"Event: {event}\n"
+            f"Consignment: {consignment_id}\n\n"
+            f"{json.dumps(order_info, indent=2)[:3000]}"
+        )
+
+        if (
+            order_info
+            and order_info.get("type") == "success"
+            and order_info.get("data")
+        ):
 
             order = order_info["data"]
 
-            message = f"""
+            msg = f"""
 📦 Pathao Update
 
 🔔 Status: {event}
@@ -183,25 +191,20 @@ async def webhook(request: Request):
 {order.get('order_created_at', '')}
 """
 
-            send_message(message)
+            send_message(msg)
 
         else:
 
             send_message(
-                f"📦 Pathao Update\n\n"
+                f"⚠️ Order info not found\n\n"
                 f"Event: {event}\n"
                 f"Consignment: {consignment_id}"
             )
 
     except Exception as e:
 
-        print("ERROR:", str(e))
-
         send_message(
-            f"⚠️ Pathao Error\n\n"
-            f"Event: {event}\n"
-            f"Consignment: {consignment_id}\n\n"
-            f"{str(e)}"
+            f"❌ ERROR\n\n{str(e)}"
         )
 
     return Response(
