@@ -5,9 +5,22 @@ import json
 
 app = FastAPI()
 
+# =========================
+# ENV VARIABLES
+# =========================
+
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
+PATHAO_CLIENT_ID = os.getenv("PATHAO_CLIENT_ID")
+PATHAO_CLIENT_SECRET = os.getenv("PATHAO_CLIENT_SECRET")
+PATHAO_EMAIL = os.getenv("PATHAO_EMAIL")
+PATHAO_PASSWORD = os.getenv("PATHAO_PASSWORD")
+
+
+# =========================
+# TELEGRAM
+# =========================
 
 def send_message(text):
     if not BOT_TOKEN or not CHAT_ID:
@@ -27,43 +40,104 @@ def send_message(text):
         print("Telegram Error:", e)
 
 
+# =========================
+# PATHAO TOKEN
+# =========================
+
+def get_access_token():
+
+    response = requests.post(
+        "https://api-hermes.pathao.com/aladdin/api/v1/issue-token",
+        json={
+            "client_id": PATHAO_CLIENT_ID,
+            "client_secret": PATHAO_CLIENT_SECRET,
+            "grant_type": "password",
+            "username": PATHAO_EMAIL,
+            "password": PATHAO_PASSWORD
+        },
+        timeout=20
+    )
+
+    data = response.json()
+
+    return data.get("access_token")
+
+
+# =========================
+# ORDER DETAILS
+# =========================
+
+def get_order_info(consignment_id):
+
+    token = get_access_token()
+
+    if not token:
+        return None
+
+    response = requests.get(
+        f"https://api-hermes.pathao.com/aladdin/api/v1/orders/{consignment_id}/info",
+        headers={
+            "Authorization": f"Bearer {token}"
+        },
+        timeout=20
+    )
+
+    return response.json()
+
+
+# =========================
+# HOME
+# =========================
+
 @app.get("/")
 def home():
     return {"status": "running"}
 
 
+# =========================
+# TEST TELEGRAM
+# =========================
+
 @app.get("/test")
 def test():
+
     send_message("✅ Telegram Test OK")
+
     return {"success": True}
 
 
+# =========================
+# DEBUG
+# =========================
+
 @app.get("/debug")
 def debug():
+
     return {
-        "PATHAO_CLIENT_ID": bool(os.getenv("PATHAO_CLIENT_ID")),
-        "PATHAO_CLIENT_SECRET": bool(os.getenv("PATHAO_CLIENT_SECRET")),
-        "PATHAO_EMAIL": bool(os.getenv("PATHAO_EMAIL")),
-        "PATHAO_PASSWORD": bool(os.getenv("PATHAO_PASSWORD"))
+        "PATHAO_CLIENT_ID": bool(PATHAO_CLIENT_ID),
+        "PATHAO_CLIENT_SECRET": bool(PATHAO_CLIENT_SECRET),
+        "PATHAO_EMAIL": bool(PATHAO_EMAIL),
+        "PATHAO_PASSWORD": bool(PATHAO_PASSWORD),
+        "BOT_TOKEN": bool(BOT_TOKEN),
+        "CHAT_ID": bool(CHAT_ID)
     }
 
 
+# =========================
+# TOKEN TEST
+# =========================
+
 @app.get("/token")
-def get_token():
+def token():
 
-    response = requests.post(
-        "https://api-hermes.pathao.com/aladdin/api/v1/issue-token",
-        json={
-            "client_id": os.getenv("PATHAO_CLIENT_ID"),
-            "client_secret": os.getenv("PATHAO_CLIENT_SECRET"),
-            "grant_type": "password",
-            "username": os.getenv("PATHAO_EMAIL"),
-            "password": os.getenv("PATHAO_PASSWORD")
-        }
-    )
+    return {
+        "access_token": get_access_token()
+    }
 
-    return response.json()
 
+# =========================
+# WEBHOOK
+# =========================
 
 @app.post("/pathao/webhook")
 async def webhook(request: Request):
@@ -79,53 +153,55 @@ async def webhook(request: Request):
 
     try:
 
-        token_response = requests.post(
-            "https://api-hermes.pathao.com/aladdin/api/v1/issue-token",
-            json={
-                "client_id": os.getenv("PATHAO_CLIENT_ID"),
-                "client_secret": os.getenv("PATHAO_CLIENT_SECRET"),
-                "grant_type": "password",
-                "username": os.getenv("PATHAO_EMAIL"),
-                "password": os.getenv("PATHAO_PASSWORD")
-            },
-            timeout=20
-        )
+        order_info = get_order_info(consignment_id)
 
-        token_data = token_response.json()
-        access_token = token_data.get("access_token")
+        if order_info and order_info.get("data"):
 
-        if access_token and consignment_id:
+            order = order_info["data"]
 
-            info_response = requests.get(
-                f"https://api-hermes.pathao.com/aladdin/api/v1/orders/{consignment_id}/info",
-                headers={
-                    "Authorization": f"Bearer {access_token}"
-                },
-                timeout=20
-            )
+            message = f"""
+📦 Pathao Update
 
-            order_info = info_response.json()
+🔔 Status: {event}
 
-            send_message(
-                f"📦 Pathao Update\n\n"
-                f"Event: {event}\n"
-                f"Consignment: {consignment_id}\n\n"
-                f"{json.dumps(order_info, indent=2)}"
-            )
+🆔 Order ID: {order.get('order_id', 'N/A')}
+📦 Consignment: {order.get('order_consignment_id', 'N/A')}
+
+👤 Customer: {order.get('recipient_name', 'N/A')}
+📞 Phone: {order.get('recipient_phone', 'N/A')}
+
+📍 Address:
+{order.get('recipient_address', 'N/A')}
+
+💰 COD Amount: ৳ {order.get('order_amount', 0)}
+🚚 Delivery Fee: ৳ {order.get('total_fee', 0)}
+
+🏙 City: {order.get('city_name', '')}
+📌 Zone: {order.get('zone_name', '')}
+
+🕒 Created:
+{order.get('order_created_at', '')}
+"""
+
+            send_message(message)
 
         else:
 
             send_message(
                 f"📦 Pathao Update\n\n"
                 f"Event: {event}\n"
-                f"Consignment: {consignment_id}\n\n"
-                f"❌ Access token not found"
+                f"Consignment: {consignment_id}"
             )
 
     except Exception as e:
 
+        print("ERROR:", str(e))
+
         send_message(
-            f"❌ Pathao Error\n\n{str(e)}"
+            f"⚠️ Pathao Error\n\n"
+            f"Event: {event}\n"
+            f"Consignment: {consignment_id}\n\n"
+            f"{str(e)}"
         )
 
     return Response(
