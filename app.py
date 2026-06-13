@@ -45,15 +45,14 @@ print("TOKEN RESPONSE:", response.text)
 try:
     data = response.json()
     return data.get("access_token")
-except:
+except Exception:
     return None
 ```
 
 def get_order_info(consignment_id):
-
-```
 token = get_access_token()
 
+```
 if not token:
     return None
 
@@ -71,7 +70,7 @@ print(response.text)
 try:
     result = response.json()
     return result.get("data")
-except:
+except Exception:
     return None
 ```
 
