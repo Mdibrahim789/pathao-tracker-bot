@@ -1,4 +1,3 @@
-:::writing{variant="document" id="41852"}
 from fastapi import FastAPI, Request, Response
 
 app = FastAPI()
@@ -21,8 +20,3 @@ async def webhook(request: Request):
             "f3992ecc-59da-4cbe-a049-a13da2018d51"
         }
     )
-:::
-
-
-```text
-fix indentation and webhook
