@@ -72,3 +72,19 @@ def debug():
         "PATHAO_EMAIL": bool(os.getenv("PATHAO_EMAIL")),
         "PATHAO_PASSWORD": bool(os.getenv("PATHAO_PASSWORD"))
     }
+@app.get("/token")
+def get_token():
+    import requests
+
+    response = requests.post(
+        "https://api-hermes.pathao.com/aladdin/api/v1/issue-token",
+        json={
+            "client_id": os.getenv("PATHAO_CLIENT_ID"),
+            "client_secret": os.getenv("PATHAO_CLIENT_SECRET"),
+            "grant_type": "password",
+            "username": os.getenv("PATHAO_EMAIL"),
+            "password": os.getenv("PATHAO_PASSWORD")
+        }
+    )
+
+    return response.json()
