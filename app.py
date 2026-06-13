@@ -64,3 +64,11 @@ async def webhook(request: Request):
             "f3992ecc-59da-4cbe-a049-a13da2018d51"
         }
     )
+@app.get("/debug")
+def debug():
+    return {
+        "PATHAO_CLIENT_ID": bool(os.getenv("PATHAO_CLIENT_ID")),
+        "PATHAO_CLIENT_SECRET": bool(os.getenv("PATHAO_CLIENT_SECRET")),
+        "PATHAO_EMAIL": bool(os.getenv("PATHAO_EMAIL")),
+        "PATHAO_PASSWORD": bool(os.getenv("PATHAO_PASSWORD"))
+    }
